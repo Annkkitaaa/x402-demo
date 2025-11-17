@@ -9,7 +9,9 @@
     "server": "node dist/server.js",
     "client": "node dist/client.js",
     "dev:server": "tsx src/server.ts",
-    "dev:client": "tsx src/client.ts"
+    "dev:client": "tsx src/client.ts",
+    "generate-wallet": "tsx src/generate-wallet.ts",
+    "start": "npm run dev:server"
   },
   "keywords": [
     "x402",
