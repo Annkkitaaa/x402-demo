@@ -5,14 +5,22 @@
 
 import express, { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import type { PaymentRequiredResponse, PaymentRequirement, PaymentPayload } from './types.js';
 import { SimpleFacilitator } from './facilitator.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const facilitator = new SimpleFacilitator();
 
 // Middleware
 app.use(express.json());
+
+// Serve static files from public directory
+app.use(express.static(join(__dirname, '../public')));
 
 // Configuration
 const SERVER_ADDRESS = process.env.SERVER_WALLET_ADDRESS || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
