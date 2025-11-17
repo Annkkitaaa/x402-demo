@@ -15,7 +15,7 @@ const facilitator = new SimpleFacilitator();
 app.use(express.json());
 
 // Configuration
-const SERVER_ADDRESS = process.env.SERVER_WALLET_ADDRESS || '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+const SERVER_ADDRESS = process.env.SERVER_WALLET_ADDRESS || '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
 const USDC_BASE_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
 const PORT = process.env.PORT || 3402;
 
