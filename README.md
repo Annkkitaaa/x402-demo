@@ -451,7 +451,7 @@ This PoC demonstrates the protocol but has some simplifications:
 
 
 
-Before deploying to mai
+Before deplo
 
 ## Learn More
 
