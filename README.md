@@ -448,11 +448,6 @@ This PoC demonstrates the protocol but has some simplifications:
 5. **Mock Facilitator**: Real implementation would use Coinbase's facilitator API
 
 
-
-
-
-Before deplo
-
 ## Learn More
 
 ### Official Resources
