@@ -566,7 +566,7 @@ Response Data:
 }
 ```
 
-## License
+## 
 
 
 
