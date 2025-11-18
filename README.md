@@ -447,7 +447,7 @@ This PoC demonstrates the protocol but has some simplifications:
 4. **Basic Error Handling**: Simplified for demonstration
 5. **Mock Facilitator**: Real implementation would use Coinbase's facilitator API
 
-## Going to Production
+
 
 ### Mainnet Checklist
 
