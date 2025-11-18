@@ -454,7 +454,7 @@ This PoC demonstrates the protocol but has some simplifications:
 Before deploying to mainnet:
 
 - [ ] Get Coinbase Developer Platform account at https://portal.cdp.coinbase.com/
-- [ ] Generate API credentials
+
 ## Learn More
 
 ### Official Resources
