@@ -451,8 +451,7 @@ This PoC demonstrates the protocol but has some simplifications:
 
 
 
-Before deploying to mainnet:
-
+Before deploying to mai
 
 ## Learn More
 
