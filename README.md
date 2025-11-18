@@ -449,7 +449,7 @@ This PoC demonstrates the protocol but has some simplifications:
 
 
 
-### Mainnet Checklist
+
 
 Before deploying to mainnet:
 
