@@ -461,8 +461,7 @@ Before deploying to mainnet:
 - [ ] Add authentication to facilitator requests
 - [ ] Test with small amounts first
 - [ ] Implement proper error handling
-- [ ] Add logging and monitoring
-- [ ] Set up payment notifications
+
 
 ## Learn More
 
