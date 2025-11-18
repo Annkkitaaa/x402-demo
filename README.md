@@ -472,7 +472,7 @@ Before deploying to mainnet:
 
 - **Basic integration**: ~30 minutes
 - **Production-ready**: 1-2 days
-- **Full featured**: 1-2 weeks
+
 
 ## Learn More
 
