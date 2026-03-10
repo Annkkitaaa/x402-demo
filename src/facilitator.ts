@@ -1,10 +1,15 @@
 /**
  * Simplified Facilitator Implementation
- * In production, this would be a separate service handling blockchain transactions
- * For this PoC, we simulate the verification and settlement process
+ *
+ * Bugs fixed:
+ *  BUG-02 — TOCTOU race: nonce claimed synchronously before any await
+ *  BUG-14 — validAfter never validated: check added
+ *  BUG-15 — Math.random() for tx hash: replaced with randomBytes
+ *  BUG-06 — silent mainnet fallback in getChainId: now throws on unknown network
  */
 
 import { ethers } from 'ethers';
+import { randomBytes } from 'crypto';
 import type {
   PaymentPayload,
   PaymentRequirement,
@@ -17,111 +22,43 @@ import type {
 export class SimpleFacilitator {
   private usedNonces: Set<string> = new Set();
 
-  /**
-   * Get supported payment schemes
-   */
   getSupported(): SupportedScheme[] {
-    return [
-      {
-        scheme: 'exact',
-        network: 'base-sepolia',
-      },
-    ];
+    return [{ scheme: 'exact', network: 'base-sepolia' }];
   }
 
   /**
-   * Verify a payment without settling it on-chain
+   * Verify a payment without settling — read-only, does NOT consume the nonce.
    */
   async verify(
     paymentHeader: string,
     paymentRequirements: PaymentRequirement
   ): Promise<VerifyResponse> {
     try {
-      // Decode the base64 payment header
       const paymentPayloadJson = Buffer.from(paymentHeader, 'base64').toString('utf-8');
       const paymentPayload: PaymentPayload = JSON.parse(paymentPayloadJson);
 
-      // Check version
       if (paymentPayload.x402Version !== 1) {
-        return {
-          isValid: false,
-          invalidReason: 'Unsupported x402 version',
-        };
+        return { isValid: false, invalidReason: 'Unsupported x402 version' };
       }
-
-      // Check scheme and network match
       if (
         paymentPayload.scheme !== paymentRequirements.scheme ||
         paymentPayload.network !== paymentRequirements.network
       ) {
-        return {
-          isValid: false,
-          invalidReason: 'Scheme or network mismatch',
-        };
+        return { isValid: false, invalidReason: 'Scheme or network mismatch' };
+      }
+      if (paymentPayload.scheme !== 'exact') {
+        return { isValid: false, invalidReason: 'Unsupported payment scheme' };
       }
 
-      // For 'exact' scheme with EIP-3009
-      if (paymentPayload.scheme === 'exact') {
-        const eip3009Payload = paymentPayload.payload as EIP3009Payload;
+      const eip3009Payload = paymentPayload.payload as EIP3009Payload;
 
-        // Verify nonce hasn't been used
-        if (this.usedNonces.has(eip3009Payload.nonce)) {
-          return {
-            isValid: false,
-            invalidReason: 'Nonce already used',
-          };
-        }
-
-        // Verify amount
-        if (eip3009Payload.value !== paymentRequirements.maxAmountRequired) {
-          return {
-            isValid: false,
-            invalidReason: 'Payment amount mismatch',
-          };
-        }
-
-        // Verify recipient
-        if (eip3009Payload.to.toLowerCase() !== paymentRequirements.payTo.toLowerCase()) {
-          return {
-            isValid: false,
-            invalidReason: 'Payment recipient mismatch',
-          };
-        }
-
-        // Verify timing
-        const now = Math.floor(Date.now() / 1000);
-        if (eip3009Payload.validBefore < now) {
-          return {
-            isValid: false,
-            invalidReason: 'Payment expired',
-          };
-        }
-
-        // Verify signature using EIP-712
-        const isValidSignature = await this.verifyEIP3009Signature(
-          eip3009Payload,
-          paymentRequirements
-        );
-
-        if (!isValidSignature) {
-          return {
-            isValid: false,
-            invalidReason: 'Invalid signature',
-          };
-        }
-
-        return {
-          isValid: true,
-          invalidReason: null,
-        };
+      // Read-only nonce check — does NOT consume
+      if (this.usedNonces.has(eip3009Payload.nonce)) {
+        return { isValid: false, invalidReason: 'Nonce already used' };
       }
 
-      return {
-        isValid: false,
-        invalidReason: 'Unsupported payment scheme',
-      };
+      return await this.verifyPayload(eip3009Payload, paymentRequirements);
     } catch (error) {
-      console.error('Verification error:', error);
       return {
         isValid: false,
         invalidReason: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -130,36 +67,60 @@ export class SimpleFacilitator {
   }
 
   /**
-   * Settle a payment on-chain (simulated for PoC)
+   * Settle a payment (simulated for PoC).
+   *
+   * BUG-02 FIX — TOCTOU: nonce is claimed synchronously before the first await.
+   * In Node.js's single-threaded event loop this guarantees no two concurrent
+   * calls can both pass the nonce guard for the same payment.
    */
   async settle(
     paymentHeader: string,
     paymentRequirements: PaymentRequirement
   ): Promise<SettleResponse> {
-    // First verify the payment
-    const verification = await this.verify(paymentHeader, paymentRequirements);
+    // ── Step 1: decode synchronously — zero awaits before nonce claim ─────────
+    let paymentPayload: PaymentPayload;
+    let eip3009Payload: EIP3009Payload;
 
-    if (!verification.isValid) {
+    try {
+      const json = Buffer.from(paymentHeader, 'base64').toString('utf-8');
+      paymentPayload = JSON.parse(json) as PaymentPayload;
+      eip3009Payload = paymentPayload.payload as EIP3009Payload;
+    } catch (error) {
       return {
         success: false,
-        error: verification.invalidReason || 'Payment verification failed',
+        error: `Invalid payment header: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
 
+    // ── Step 2: atomic nonce claim — synchronous, no await between check/set ──
+    if (this.usedNonces.has(eip3009Payload.nonce)) {
+      return { success: false, error: 'Nonce already used' };
+    }
+    this.usedNonces.add(eip3009Payload.nonce); // claimed — TOCTOU prevented
+
+    // ── Step 3: cheap synchronous checks before async signature verification ──
+    if (paymentPayload.x402Version !== 1) {
+      return { success: false, error: 'Unsupported x402 version' };
+    }
+    if (
+      paymentPayload.scheme !== paymentRequirements.scheme ||
+      paymentPayload.network !== paymentRequirements.network
+    ) {
+      return { success: false, error: 'Scheme or network mismatch' };
+    }
+    if (paymentPayload.scheme !== 'exact') {
+      return { success: false, error: 'Unsupported payment scheme' };
+    }
+
+    // ── Step 4: async payload verification (nonce already claimed) ───────────
     try {
-      // Decode payment
-      const paymentPayloadJson = Buffer.from(paymentHeader, 'base64').toString('utf-8');
-      const paymentPayload: PaymentPayload = JSON.parse(paymentPayloadJson);
-      const eip3009Payload = paymentPayload.payload as EIP3009Payload;
+      const result = await this.verifyPayload(eip3009Payload, paymentRequirements);
+      if (!result.isValid) {
+        return { success: false, error: result.invalidReason ?? 'Payment verification failed' };
+      }
 
-      // Mark nonce as used
-      this.usedNonces.add(eip3009Payload.nonce);
-
-      // In a real implementation, this would submit the transaction to the blockchain
-      // For this PoC, we simulate it with a fake transaction hash
-      const fakeTxHash = `0x${Array.from({ length: 64 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('')}`;
+      // BUG-15 FIX: use cryptographically secure randomBytes, not Math.random()
+      const fakeTxHash = '0x' + randomBytes(32).toString('hex');
 
       console.log(`[Facilitator] Simulated settlement on ${paymentPayload.network}`);
       console.log(`[Facilitator] Transaction hash: ${fakeTxHash}`);
@@ -167,11 +128,7 @@ export class SimpleFacilitator {
       console.log(`[Facilitator] From: ${eip3009Payload.from}`);
       console.log(`[Facilitator] To: ${eip3009Payload.to}`);
 
-      return {
-        success: true,
-        txHash: fakeTxHash,
-        networkId: paymentPayload.network,
-      };
+      return { success: true, txHash: fakeTxHash, networkId: paymentPayload.network };
     } catch (error) {
       return {
         success: false,
@@ -181,14 +138,50 @@ export class SimpleFacilitator {
   }
 
   /**
-   * Verify EIP-3009 signature (EIP-712 typed data signature)
+   * Validate all payment fields except nonce reuse.
+   * Shared by verify() and settle() to avoid duplicating logic.
+   *
+   * BUG-14 FIX: validAfter is now checked.
    */
+  private async verifyPayload(
+    eip3009Payload: EIP3009Payload,
+    requirements: PaymentRequirement
+  ): Promise<VerifyResponse> {
+    if (eip3009Payload.value !== requirements.maxAmountRequired) {
+      return { isValid: false, invalidReason: 'Payment amount mismatch' };
+    }
+
+    if (eip3009Payload.to.toLowerCase() !== requirements.payTo.toLowerCase()) {
+      return { isValid: false, invalidReason: 'Payment recipient mismatch' };
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // BUG-14 FIX: reject payments whose validity window hasn't opened yet
+    if (eip3009Payload.validAfter > now) {
+      return {
+        isValid: false,
+        invalidReason: 'Payment not yet valid (validAfter is in the future)',
+      };
+    }
+
+    if (eip3009Payload.validBefore < now) {
+      return { isValid: false, invalidReason: 'Payment expired' };
+    }
+
+    const isValidSignature = await this.verifyEIP3009Signature(eip3009Payload, requirements);
+    if (!isValidSignature) {
+      return { isValid: false, invalidReason: 'Invalid signature' };
+    }
+
+    return { isValid: true, invalidReason: null };
+  }
+
   private async verifyEIP3009Signature(
     payload: EIP3009Payload,
     requirements: PaymentRequirement
   ): Promise<boolean> {
     try {
-      // Construct EIP-712 domain
       const domain = {
         name: requirements.extra?.name || 'USD Coin',
         version: requirements.extra?.version || '2',
@@ -196,7 +189,6 @@ export class SimpleFacilitator {
         verifyingContract: requirements.asset,
       };
 
-      // Define EIP-3009 types
       const types = {
         TransferWithAuthorization: [
           { name: 'from', type: 'address' },
@@ -208,7 +200,6 @@ export class SimpleFacilitator {
         ],
       };
 
-      // Construct the message
       const message = {
         from: payload.from,
         to: payload.to,
@@ -218,14 +209,7 @@ export class SimpleFacilitator {
         nonce: payload.nonce,
       };
 
-      // Verify signature
-      const recoveredAddress = ethers.verifyTypedData(
-        domain,
-        types,
-        message,
-        payload.signature
-      );
-
+      const recoveredAddress = ethers.verifyTypedData(domain, types, message, payload.signature);
       return recoveredAddress.toLowerCase() === payload.from.toLowerCase();
     } catch (error) {
       console.error('Signature verification error:', error);
@@ -234,7 +218,7 @@ export class SimpleFacilitator {
   }
 
   /**
-   * Get chain ID for a given network
+   * BUG-06 FIX: throw on unknown networks — no silent mainnet fallback.
    */
   private getChainId(network: string): number {
     const chainIds: Record<string, number> = {
@@ -243,6 +227,12 @@ export class SimpleFacilitator {
       'ethereum': 1,
       'sepolia': 11155111,
     };
-    return chainIds[network] || 1;
+    const id = chainIds[network];
+    if (id === undefined) {
+      throw new Error(
+        `Unsupported network: "${network}". Supported: ${Object.keys(chainIds).join(', ')}`
+      );
+    }
+    return id;
   }
 }

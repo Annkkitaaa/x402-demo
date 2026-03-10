@@ -38,8 +38,10 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Access content with x402 payment
-async function accessContent(endpoint, contentId) {
+// BUG-04 FIX: accept event as an explicit parameter instead of relying on the
+// deprecated implicit window.event global (which is undefined in Firefox and
+// strict-mode environments).
+async function accessContent(endpoint, contentId, event) {
     // Check wallet connection
     if (!wallet) {
         showNotification('Please connect your wallet first', 'error');
@@ -47,7 +49,7 @@ async function accessContent(endpoint, contentId) {
     }
 
     const resultDiv = document.getElementById(`content-${contentId}`);
-    const button = event.target;
+    const button = event.currentTarget;
     button.disabled = true;
     button.textContent = 'Processing...';
 
@@ -143,7 +145,17 @@ async function accessContent(endpoint, contentId) {
     } catch (error) {
         console.error('[Client] Error:', error);
         showNotification(`Error: ${error.message}`, 'error');
-        resultDiv.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+
+        // BUG-03 FIX: use DOM API instead of innerHTML to prevent XSS if the
+        // error message contains HTML from a server-controlled error field.
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        const label = document.createElement('strong');
+        label.textContent = 'Error: ';
+        errorDiv.appendChild(label);
+        errorDiv.appendChild(document.createTextNode(error.message));
+        resultDiv.innerHTML = '';
+        resultDiv.appendChild(errorDiv);
         resultDiv.classList.remove('hidden');
     } finally {
         button.textContent = endpoint === '/public' ? 'Access Now' : 'Pay & Access';
@@ -217,23 +229,31 @@ async function createPayment(wallet, requirement) {
     return paymentHeader;
 }
 
-// Display content
+// Display content — uses textContent for user-facing data (defense in depth)
 function displayContent(div, data, requirement) {
+    div.innerHTML = '';
     div.classList.remove('hidden');
 
-    let html = '<div style="margin-bottom: 12px;">';
-    html += '<strong style="color: var(--success-color);">✓ Access Granted</strong>';
-    html += '</div>';
+    const header = document.createElement('div');
+    header.style.marginBottom = '12px';
+    const check = document.createElement('strong');
+    check.style.color = 'var(--success-color)';
+    check.textContent = '✓ Access Granted';
+    header.appendChild(check);
+    div.appendChild(header);
 
     if (requirement) {
-        const amount = formatAmount(requirement.maxAmountRequired);
-        html += `<div style="margin-bottom: 12px; color: var(--text-secondary);">`;
-        html += `Paid: ${amount} USDC`;
-        html += '</div>';
+        const amountDiv = document.createElement('div');
+        amountDiv.style.marginBottom = '12px';
+        amountDiv.style.color = 'var(--text-secondary)';
+        amountDiv.textContent = `Paid: ${formatAmount(requirement.maxAmountRequired)} USDC`;
+        div.appendChild(amountDiv);
     }
 
-    html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-    div.innerHTML = html;
+    // textContent on <pre> safely renders JSON without HTML injection risk
+    const pre = document.createElement('pre');
+    pre.textContent = JSON.stringify(data, null, 2);
+    div.appendChild(pre);
 }
 
 // Display transaction info
@@ -280,6 +300,7 @@ function completeStep(stepNum) {
 }
 
 // Utility functions
+// BUG-06 FIX: throw on unknown networks — no silent fallback to Ethereum mainnet
 function getChainId(network) {
     const chainIds = {
         'base-sepolia': 84532,
@@ -287,7 +308,11 @@ function getChainId(network) {
         'ethereum': 1,
         'sepolia': 11155111,
     };
-    return chainIds[network] || 1;
+    const id = chainIds[network];
+    if (id === undefined) {
+        throw new Error(`Unsupported network: "${network}". Supported: ${Object.keys(chainIds).join(', ')}`);
+    }
+    return id;
 }
 
 function formatAmount(amount) {
@@ -304,16 +329,27 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// BUG-12 FIX: show a visible toast notification instead of console.log only.
+// Uses textContent to prevent XSS in the notification message.
 function showNotification(message, type) {
-    // Simple notification - could be enhanced with a toast library
-    const color = {
-        success: 'var(--success-color)',
-        error: 'var(--danger-color)',
-        info: 'var(--primary-color)',
-    }[type] || 'var(--text-secondary)';
-
     console.log(`[${type.toUpperCase()}] ${message}`);
 
-    // You could add a toast notification here
-    // For now, just using console logs
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message; // textContent — safe, no HTML injection
+
+    container.appendChild(toast);
+
+    // Trigger CSS enter animation on next frame
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    // Auto-remove after 3 s
+    setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.classList.add('toast-hide');
+        setTimeout(() => toast.remove(), 350);
+    }, 3000);
 }

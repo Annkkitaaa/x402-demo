@@ -187,7 +187,9 @@ async function createPayment(
 }
 
 /**
- * Get chain ID for a network
+ * Get chain ID for a network.
+ * BUG-06 FIX: throw on unknown networks instead of silently defaulting to
+ * Ethereum mainnet (chain ID 1), which could cause signatures for the wrong chain.
  */
 function getChainId(network: string): number {
   const chainIds: Record<string, number> = {
@@ -196,7 +198,13 @@ function getChainId(network: string): number {
     'ethereum': 1,
     'sepolia': 11155111,
   };
-  return chainIds[network] || 1;
+  const id = chainIds[network];
+  if (id === undefined) {
+    throw new Error(
+      `Unsupported network: "${network}". Supported: ${Object.keys(chainIds).join(', ')}`
+    );
+  }
+  return id;
 }
 
 /**
