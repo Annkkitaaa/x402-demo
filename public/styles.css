@@ -379,6 +379,48 @@ footer a:hover {
     pointer-events: none;
 }
 
+/* ── BUG-12 FIX: Toast notifications ──────────────────────────────────────── */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 220px;
+    max-width: 380px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    word-break: break-word;
+    /* start invisible, slightly shifted right */
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.toast.toast-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast.toast-hide {
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+.toast.toast-success { background: var(--success-color); }
+.toast.toast-error   { background: var(--danger-color); }
+.toast.toast-info    { background: var(--primary-color); }
+
 /* Responsive */
 @media (max-width: 768px) {
     header h1 {

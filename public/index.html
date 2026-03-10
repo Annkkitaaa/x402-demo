@@ -52,7 +52,8 @@
                     </div>
                     <h3>Public Endpoint</h3>
                     <p class="card-desc">No payment required - open access for everyone</p>
-                    <button onclick="accessContent('/public', 'free')" class="btn btn-secondary">
+                    <!-- BUG-04 FIX: pass event explicitly — avoids deprecated window.event global -->
+                    <button onclick="accessContent('/public', 'free', event)" class="btn btn-secondary">
                         Access Now
                     </button>
                     <div id="content-free" class="content-result hidden"></div>
@@ -65,7 +66,7 @@
                     </div>
                     <h3>API Call Service</h3>
                     <p class="card-desc">Process data with our premium API endpoint</p>
-                    <button onclick="accessContent('/api-call', 'api')" class="btn btn-primary">
+                    <button onclick="accessContent('/api-call', 'api', event)" class="btn btn-primary">
                         Pay & Access
                     </button>
                     <div id="content-api" class="content-result hidden"></div>
@@ -78,7 +79,7 @@
                     </div>
                     <h3>Premium Market Data</h3>
                     <p class="card-desc">Real-time crypto market insights and analysis</p>
-                    <button onclick="accessContent('/premium-data', 'premium')" class="btn btn-premium">
+                    <button onclick="accessContent('/premium-data', 'premium', event)" class="btn btn-premium">
                         Pay & Access
                     </button>
                     <div id="content-premium" class="content-result hidden"></div>
@@ -142,6 +143,9 @@
             <p>Built on Base Sepolia Testnet</p>
         </footer>
     </div>
+
+    <!-- BUG-12 FIX: toast container for visible notifications -->
+    <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
     <script src="script.js"></script>
