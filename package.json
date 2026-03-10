@@ -14,7 +14,14 @@
     "dev:client": "tsx src/client.ts",
     "generate-wallet": "tsx src/generate-wallet.ts",
     "start": "npm run dev:server",
-    "start:real": "npm run dev:server:real"
+    "start:real": "npm run dev:server:real",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "keywords": [
     "x402",
@@ -34,7 +41,12 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
+    "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^1.6.0",
+    "@playwright/test": "^1.44.0",
+    "supertest": "^7.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.0"
   }
 }
